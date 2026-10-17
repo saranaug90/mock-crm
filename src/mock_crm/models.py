@@ -103,3 +103,24 @@ class CustomerSummary(CRMModel):
     ticket_count: int
     open_count: int
     max_priority: int
+
+
+class CustomerTotal(CRMModel):
+    """A Customer's combined order value."""
+
+    customer: str
+    total: float
+
+
+class TicketCreate(CRMModel):
+    """The fields the customemr supplies to create a new ticket."""
+
+    customer: str = Field(pattern=r"^C-\d+$", description="Customer ID, e.g. C-1")
+    priority: int = Field(default=3, ge=1, le=5, description="1 = low, 5 = urgent")
+
+
+class TicketUpdate(CRMModel):
+    status: Status | None = Field(
+        default=None, description="Status to which the ticket is getting updated"
+    )
+    assignee: str | None = Field(default=None, description="Support agent handling it")

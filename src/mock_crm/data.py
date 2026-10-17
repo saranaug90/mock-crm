@@ -1,6 +1,5 @@
 """Sample CRM records. Stand in for a real database until Week 2."""
 
-
 from mock_crm.models import Customer, LineItem, Order, Ticket
 
 CUSTOMERS: list[Customer] = [

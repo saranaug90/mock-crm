@@ -6,7 +6,15 @@ from typing import Annotated
 from pydantic import Field
 
 from mock_crm.data import CUSTOMERS, ORDERS, TICKETS
-from mock_crm.models import Customer, CustomerSummary, Order, Status, Ticket
+from mock_crm.models import (
+    Customer,
+    CustomerSummary,
+    Order,
+    Status,
+    Ticket,
+    TicketCreate,
+    TicketUpdate,
+)
 
 
 def get_customer(customer_id: str) -> Customer | None:
@@ -80,3 +88,37 @@ def customer_order_total(customer_id: str) -> float:
     return sum(
         (order.total() for order in ORDERS if order.customer == customer_id), 0.0
     )
+
+
+def next_ticket_id() -> str:
+    """Return the next unused ticket id, e.g. T-5 when T-4 is the highest."""
+
+    highest = max((int(t.id.split("-")[1]) for t in TICKETS), default=0)
+    return f"T-{highest + 1}"
+
+
+def create_ticket(new: TicketCreate) -> Ticket:
+    """open a new ticket for a customer with status open and no assignee."""
+    ticket = Ticket(
+        id=next_ticket_id(),
+        customer=new.customer,
+        status="open",
+        priority=new.priority,
+    )
+    TICKETS.append(ticket)
+    return ticket
+
+
+def update_ticket(ticket_id: str, changes: TicketUpdate) -> Ticket | None:
+    """Apply a partial update to a ticket and return the updated ticket.
+
+    Returns None if no ticket has that ID. Raises ValidationError if the
+    result breaks a ticket rule, e.g. closing a ticket with no assignee.
+    """
+    for i, existing in enumerate(TICKETS):
+        if existing.id == ticket_id:
+            updates = changes.model_dump(exclude_none=True)
+            updated = Ticket.model_validate(existing.model_dump() | updates)
+            TICKETS[i] = updated
+            return updated
+    return None
