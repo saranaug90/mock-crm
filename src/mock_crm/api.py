@@ -1,4 +1,4 @@
-"""HTTP API for the Mock CRM"""
+"""HTTP API for the Mock CRM."""
 
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
@@ -50,7 +50,10 @@ async def health() -> dict[str, str]:
     responses={404: {"description": "No ticket with that ID"}},
 )
 async def read_ticket(ticket_id: str) -> Ticket:
-    """Return Ticket by its ID. Responds 404 if no such ticket exists."""
+    """Return the Ticket with the given ID.
+
+    Responds 404 if no such ticket exists.
+    """
     ticket = get_ticket(ticket_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} not found")
@@ -60,12 +63,11 @@ async def read_ticket(ticket_id: str) -> Ticket:
 @app.get(
     "/tickets",
     tags=["tickets"],
-    responses={404: {"description": "No ticket with that ID"}},
 )
 async def search_tickets(status: Status, min_priority: int = 1) -> list[str]:
     """Return list of Ticket ids with a given status, at or above a minimum priority.
 
-    Responds 404 if no such ticket exists."""
+    Returns an empty list if no tickets match."""
     return find_tickets(status, min_priority)
 
 
@@ -87,7 +89,9 @@ async def read_customer(customer_id: str) -> Customer:
 )
 async def read_customer_summary(customer_id: str) -> CustomerSummary:
     """Return Customer ticket summary details from Customer ID.
-    Responds 404 if no such customer exists."""
+
+    Responds 404 if no such customer exists.
+    """
     require_customer(customer_id)
     return summarize_customer(customer_id)
 
@@ -98,8 +102,10 @@ async def read_customer_summary(customer_id: str) -> CustomerSummary:
     responses={404: {"description": "No Customer with that ID"}},
 )
 async def read_customer_orders(customer_id: str) -> list[Order]:
-    """Return Customer list of orders from their Customer Id.
-    Responds 404 if no such customer exists."""
+    """Return Customer list of orders from their Customer ID.
+
+    Responds 404 if no such customer exists.
+    """
     require_customer(customer_id)
     return orders_by_customer().get(customer_id, [])
 
@@ -110,8 +116,10 @@ async def read_customer_orders(customer_id: str) -> list[Order]:
     responses={404: {"description": "No Customer with that ID"}},
 )
 async def read_customer_total(customer_id: str) -> CustomerTotal:
-    """Return Customer total spent from their Id.
-    Responds 404 if no such customer exists."""
+    """Return Customer total spent from their ID.
+
+    Responds 404 if no such customer exists.
+    """
     require_customer(customer_id)
     return CustomerTotal(
         customer=customer_id,
@@ -126,13 +134,12 @@ async def read_customer_total(customer_id: str) -> CustomerTotal:
     responses={404: {"description": "No Customer with that ID"}},
 )
 async def open_ticket(new: TicketCreate) -> Ticket:
-    """open a new ticket for an existing customer.Server assigns the ticket id; New ticket starts as open status with no assignee.
-    Responds 404 if no such customer exists."""
+    """Open a new ticket for an existing customer. Server assigns the ticket ID; New ticket starts as open status with no assignee.
 
-    if get_customer(new.customer) is None:
-        raise HTTPException(
-            status_code=404, detail=f"Customer {new.customer} not found."
-        )
+    Responds 404 if no such customer exists.
+    """
+
+    require_customer(new.customer)
     return create_ticket(new)
 
 
@@ -145,14 +152,16 @@ async def open_ticket(new: TicketCreate) -> Ticket:
     },
 )
 async def change_ticket(ticket_id: str, changes: TicketUpdate) -> Ticket:
-    """Apply partial update to the existing Ticket.
-    Responds 404 if no tickets exists, and 422 if the ticket is updated with closed status and no assignee.
+    """Apply a partial update to a ticket's status and/or assignee.
+
+    Responds 404 if the ticket doesn't exist, and 422 if the change breaks
+    a ticket rule, such as closing a ticket with no assignee.
     """
     try:
-        updateticket = update_ticket(ticket_id, changes)
-        if updateticket is None:
-            raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} not found")
+        updated = update_ticket(ticket_id, changes)
     except ValidationError as e:
-        raise HTTPException(status_code=422, detail=format_errors(e))
+        raise HTTPException(status_code=422, detail=format_errors(e)) from e
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} not found")
 
-    return updateticket
+    return updated
