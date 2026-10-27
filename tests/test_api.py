@@ -109,3 +109,7 @@ def test_read_customer_orders_with_no_orders_returns_empty_list() -> None:
     response = client.get("/customers/C-3/orders")
     assert response.status_code == 200
     assert response.json() == []
+
+def test_open_ticket_with_invalid_priority_returns_404() -> None:
+    response = client.post("/tickets", json={"customer": "C-99", "priority": "1"})
+    assert response.status_code == 404
