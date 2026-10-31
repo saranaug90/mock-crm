@@ -7,10 +7,11 @@ integration portfolio project.
 ## Why this exists
 
 This project exposes an enterprise system to AI agents, in stages. It currently
-provides a typed data layer and an HTTP API over it. Later stages let an LLM
-call the API through tool use, and publish it as an MCP server. Every service
-function has typed parameters and an LLM-oriented docstring, so it can become
-an agent tool without redesign.
+provides a typed data layer and an HTTP API over it. An LLM triage pipeline already
+turns free-text customer messages into prioritized tickets through this API. 
+Later stages let an LLM call the API through tool use, and publish it as an MCP 
+server. Every service function has typed parameters and an LLM-oriented docstring, 
+so it can become an agent tool without redesign.
 
 ## Features
 
@@ -38,7 +39,9 @@ tests/                # pytest suite
 ├── test_models.py    # pytest for pydantic models
 └── test_services.py  # pytest for Query functions
 scripts/
-└── call_api.py       # example client calls using httpx
+├── call_api.py       # example client calls using httpx
+├── triage_inbox.py   # LLM triage pipeline: messages → tickets via the API
+└── llm_day*.py       # learning exercises: prompting, structured output, async LLM calls
 ```
 
 ## Running it
@@ -73,6 +76,35 @@ Then open http://127.0.0.1:8000/docs for interactive documentation.
 
 Data is held in memory and resets when the service restarts.
 
+## LLM triage pipeline
+
+`scripts/triage_inbox.py` turns free-text customer messages into prioritized
+tickets in the CRM:
+
+1. **Health check:** confirms the CRM API is reachable before doing anything,
+   so no LLM calls are spent when the CRM is down.
+2. **Triage:** each message is sent to Claude, which returns structured output
+   validated by Pydantic: queue, priority (1–5), a one-sentence summary, and a
+   `needs_human` flag. Calls run concurrently, at most four at a time.
+3. **Business rules in code:** priority 4–5 always requires human review,
+   regardless of what the model returned.
+4. **Ticket creation:** each triaged message becomes a ticket via `POST /tickets`.
+   Messages triaged as `other` (not support requests) are ignored.
+5. **Report:** counts of tickets created, failures, and ignored messages, a
+   breakdown by queue, and the tickets that need human review.
+
+Failures are isolated: a failed LLM call or a rejected API call is logged and
+skipped, and the rest of the batch continues.
+
+**Current limitation:** the API stores only customer and priority. Queue,
+summary, and `needs_human` appear in the report but are not yet persisted.
+
+Requires an Anthropic API key in a `.env` file (`ANTHROPIC_API_KEY=...`) and
+the API running:
+
+```
+uv run python scripts/triage_inbox.py
+```
 ## Design notes
 
 - **Layered design:** `services.py` holds the data logic with no knowledge of
@@ -92,5 +124,6 @@ Data is held in memory and resets when the service restarts.
 
 - [x] Typed, validated data layer
 - [x] Async FastAPI service exposing the CRM
+- [x] LLM triage pipeline: free-text messages become prioritized tickets via the API
 - [ ] LLM tool calling against the service
 - [ ] MCP server wrapping the CRM

@@ -79,12 +79,20 @@ async def make_error(client: AsyncAnthropic, model: str = MODEL) -> None:
         print(getattr(e, "status_code", None))
 
 
+def apply_business_rules(result: TicketTriage) -> TicketTriage:
+    """Enforce rules that follow mechanically from other fields."""
+    if result.priority >= 4:
+        result.needs_human = True
+    return result
+
+
 async def safe_triage(
     client: AsyncAnthropic, message: str, sem: asyncio.Semaphore
 ) -> TicketTriage | None:
     async with sem:
         try:
-            return await triage(client, message)
+            result = await triage(client, message)
+            return apply_business_rules(result)
         except anthropic.APIError as e:
             print(f"API error for {message!r}:{type(e).__name__}")
         except ValueError as e:
@@ -141,4 +149,5 @@ async def main() -> None:
     print(result)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
