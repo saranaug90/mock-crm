@@ -90,6 +90,7 @@ class Tool:
     description: str
     input_model: type[BaseModel]
     run: Callable[[httpx.AsyncClient, Any], Awaitable[Any]]
+    writes: bool = False   # True if the tool changes data
 
     def to_param(self) -> ToolParam:
         """The definition sent to the model, with the schema generated from the input model."""
@@ -117,7 +118,7 @@ TOOLS: dict[str, Tool] = {
         Tool("update_ticket",
              "Change a ticket's status and/or assignee. Business rule: a ticket can only be "
              "closed if it has an assignee. Returns the updated ticket.",
-             UpdateTicketInput, run_update_ticket),
+             UpdateTicketInput, run_update_ticket,writes=True),
         Tool("get_customer_total",
              "Returns the sum of all the customer’s order totals, in USD",
              GetCustomerTotalInput,run_get_customer_total)
