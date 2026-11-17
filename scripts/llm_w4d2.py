@@ -51,6 +51,9 @@ class UpdateTicketInput(BaseModel):
 class GetCustomerTotalInput(BaseModel):
     customer_id: str = CUSTOMER_ID
 
+class GetCustomerSummaryInput(BaseModel):
+    customer_id: str = CUSTOMER_ID
+
 
 # ---- Tool code: each one calls the CRM ----
 
@@ -82,6 +85,12 @@ async def run_get_customer_total(crm: httpx.AsyncClient, args: GetCustomerTotalI
     response = await crm.get(f"/customers/{args.customer_id}/total")
     response.raise_for_status()
     return response.json()
+
+async def run_get_customer_summary(crm: httpx.AsyncClient,args: GetCustomerSummaryInput)-> Any:
+    response = await crm.get(f"/customers/{args.customer_id}/summary")
+    response.raise_for_status()
+    return response.json()
+
 
 @dataclass
 class Tool:
@@ -118,10 +127,13 @@ TOOLS: dict[str, Tool] = {
         Tool("update_ticket",
              "Change a ticket's status and/or assignee. Business rule: a ticket can only be "
              "closed if it has an assignee. Returns the updated ticket.",
-             UpdateTicketInput, run_update_ticket,writes=True),
+             UpdateTicketInput, run_update_ticket, writes=True),
         Tool("get_customer_total",
              "Returns the sum of all the customer’s order totals, in USD",
-             GetCustomerTotalInput,run_get_customer_total)
+             GetCustomerTotalInput,run_get_customer_total),
+        Tool("get_customer_summary",
+             "Returns the customer's ticket summary details , Total tickets, open tickets and high priority tickets",
+             GetCustomerSummaryInput,run_get_customer_summary)
     ]
 }
 async def execute(crm: httpx.AsyncClient, tool_use: ToolUseBlock) -> ToolResultBlockParam:
