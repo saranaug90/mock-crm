@@ -7,11 +7,10 @@ integration portfolio project.
 ## Why this exists
 
 This project exposes an enterprise system to AI agents, in stages. It currently
-provides a typed data layer and an HTTP API over it. An LLM triage pipeline already
-turns free-text customer messages into prioritized tickets through this API. 
-Later stages let an LLM call the API through tool use, and publish it as an MCP 
-server. Every service function has typed parameters and an LLM-oriented docstring, 
-so it can become an agent tool without redesign.
+provides a typed data layer and an HTTP API over it. An LLM triage pipeline turns
+free-text customer messages into prioritized tickets through this API, and a CRM
+assistant answers questions and makes changes by calling the API as tools. The
+next stage publishes those tools as an MCP server.
 
 ## Features
 
@@ -24,6 +23,7 @@ so it can become an agent tool without redesign.
 - REST API with correct status codes (201, 404, 422) and documented error responses
 - Business rules re-validated on every update; invalid changes never reach stored data
 - End-to-end API tests with isolated test data
+- CRM assistant with human approval for every write, a read-only mode, and an audit log
 
 ## Project structure
 
@@ -33,15 +33,23 @@ src/mock_crm/
 ├── data.py           # Sample records (stand-in for a database)
 ├── services.py       # Query functions
 ├── errors.py         # Validation error formatting
-└── api.py            # FastAPI service: HTTP endpoints over the services
+├── api.py            # FastAPI service: HTTP endpoints over the services
+└── agent/            # CRM assistant
+    ├── tools.py      # Tool inputs, CRM calls, and the tool registry
+    ├── loop.py       # Agent loop: approvals, read-only mode, audit log
+    └── chat.py       # Command-line chat
 tests/                # pytest suite
-├── test_api.py       # pytest for FastAPI service
-├── test_models.py    # pytest for pydantic models
-└── test_services.py  # pytest for Query functions
+├── test_models.py    # Pydantic models
+├── test_services.py  # Query functions
+├── test_api.py       # FastAPI service
+└── test_agent.py     # Agent loop and safety rules, with a fake model and a fake CRM
 scripts/
-├── call_api.py       # example client calls using httpx
+├── call_api.py       # Example client calls using httpx
 ├── triage_inbox.py   # LLM triage pipeline: messages → tickets via the API
-└── llm_day*.py       # learning exercises: prompting, structured output, async LLM calls
+├── llm_day4.py       # Triage step used by the pipeline
+├── llm_day5.py       # Concurrent triage used by the pipeline
+└── eval_tools.py     # Tool-choice eval against the real model
+learning/             # Learning exercises: first API calls, prompting, tool use
 ```
 
 ## Running it
@@ -59,6 +67,10 @@ uv run pytest      # run the tests
 ```
 uv run fastapi dev src/mock_crm/api.py
 ```
+
+For agent sessions, use `uv run fastapi run src/mock_crm/api.py` instead: `dev`
+mode reloads on file changes, which resets the in-memory data.
+
 
 Then open http://127.0.0.1:8000/docs for interactive documentation.
 
@@ -105,6 +117,61 @@ the API running:
 ```
 uv run python scripts/triage_inbox.py
 ```
+
+
+## CRM assistant
+
+`src/mock_crm/agent/` is a command-line assistant for support staff: ask about
+tickets and customers in plain English, or ask for changes, and it answers by
+calling the CRM's API as tools.
+
+```
+You: Does C-1 have any high-priority open tickets?
+[round 1] ->search_tickets {'status': 'open', 'min_priority': 4}
+[round 2] ->get_ticket {'ticket_id': 'T-3'}
+Assistant: Yes. C-1 has one high-priority open ticket: T-3 (priority 5, urgent). It's currently unassigned.
+```
+
+How it works:
+
+1. The question and the list of tools (each with a description and an input
+   schema generated from a Pydantic model) are sent to Claude.
+2. Claude chooses which tools to call and with what arguments.
+3. The code validates the arguments, calls the CRM API, and sends the results
+   back to Claude.
+4. This repeats until Claude answers, with a limit on the number of steps.
+
+**Safety controls**
+
+- **Approval for every write:** a change is shown to the user and runs only if
+  they approve it. Reads run without approval.
+- **Read-only mode:** write tools are not offered to the model, and are refused
+  if requested anyway.
+- **Validated arguments:** invalid arguments (such as a customer ID where a
+  ticket ID is expected) are rejected before the CRM is called.
+- **Safe errors:** CRM errors are returned to the model so it can explain them,
+  without internal details.
+- **Audit log:** every tool call is recorded, with its arguments and whether it
+  was approved.
+
+**Testing**
+
+- **pytest** with a fake model and a fake CRM checks the safety rules and the
+  agent loop: no API key, no server, about three seconds.
+- **An eval** (`scripts/eval_tools.py`) asks the real model a set of questions
+  and measures how often it chooses the right tool.
+
+**Running it**
+
+Requires an Anthropic API key in `.env` and the API running in `run` mode
+(`dev` mode reloads on file changes, which resets the data):
+
+```
+uv run fastapi run src/mock_crm/api.py
+uv run python -m mock_crm.agent.chat
+```
+
+
 ## Design notes
 
 - **Layered design:** `services.py` holds the data logic with no knowledge of
@@ -125,5 +192,5 @@ uv run python scripts/triage_inbox.py
 - [x] Typed, validated data layer
 - [x] Async FastAPI service exposing the CRM
 - [x] LLM triage pipeline: free-text messages become prioritized tickets via the API
-- [ ] LLM tool calling against the service
+- [x] LLM tool calling against the service
 - [ ] MCP server wrapping the CRM

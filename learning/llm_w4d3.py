@@ -6,8 +6,7 @@ import httpx
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, ToolUseBlock
 from dotenv import load_dotenv
-
-from llm_w4d2 import TOOLS, execute, text_of
+from mock_crm.agent.tools import TOOLS, execute, text_of
 
 MODEL = "claude-haiku-5-5"
 CRM_URL = "http://127.0.0.1:8000"
@@ -21,16 +20,18 @@ SYSTEM = (
     "Keep answers short, because support leads are busy. "
     "Never mention tool names to the user. "
 )
-    
+
 
 LIMIT_NOTE = (
     "\n\nThe step limit for the current request has been reached. Answer now without tools, "
     "using only the information above. Say what you couldn't check and suggest a follow-up "
     "question the user can ask. Never mention tool names."
-   
 )
 
-async def run_agent(llm: AsyncAnthropic, crm: httpx.AsyncClient, messages: list[MessageParam]) -> str:
+
+async def run_agent(
+    llm: AsyncAnthropic, crm: httpx.AsyncClient, messages: list[MessageParam]
+) -> str:
     """Call the model and run its tool requests until it gives a final answer."""
     tools = [tool.to_param() for tool in TOOLS.values()]
     input_tokens = 0
@@ -44,11 +45,11 @@ async def run_agent(llm: AsyncAnthropic, crm: httpx.AsyncClient, messages: list[
 
         input_tokens += response.usage.input_tokens
         output_tokens += response.usage.output_tokens
-        print("input_token: ",input_tokens)
-        print("output_token: ",output_tokens)
+        print("input_token: ", input_tokens)
+        print("output_token: ", output_tokens)
 
         if response.stop_reason != "tool_use":
-            return text_of(response)                     # finished: the model answered
+            return text_of(response)  # finished: the model answered
 
         tool_uses = [b for b in response.content if isinstance(b, ToolUseBlock)]
         for t in tool_uses:
@@ -60,15 +61,28 @@ async def run_agent(llm: AsyncAnthropic, crm: httpx.AsyncClient, messages: list[
     last = messages[-1]
     final_messages: list[MessageParam] = [
         *messages[:-1],
-        {"role": "user", "content": [*last["content"], {"type": "text", "text": LIMIT_NOTE}]},
+        {
+            "role": "user",
+            "content": [*last["content"], {"type": "text", "text": LIMIT_NOTE}],
+        },
     ]
     response = await llm.messages.create(
-        model=MODEL, max_tokens=1000, system=SYSTEM, tools=tools,
-        tool_choice={"type": "none"}, messages=final_messages,
+        model=MODEL,
+        max_tokens=1000,
+        system=SYSTEM,
+        tools=tools,
+        tool_choice={"type": "none"},
+        messages=final_messages,
     )
-    answer = text_of(response) or "Sorry, I couldn't finish that request. Please try a narrower question."
-    messages.append({"role": "assistant", "content": answer})    # plain text: its blocks were signed with the note
+    answer = (
+        text_of(response)
+        or "Sorry, I couldn't finish that request. Please try a narrower question."
+    )
+    messages.append(
+        {"role": "assistant", "content": answer}
+    )  # plain text: its blocks were signed with the note
     return answer
+
 
 async def chat() -> None:
     """A simple command-line chat with the CRM assistant."""

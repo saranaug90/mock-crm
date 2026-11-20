@@ -5,11 +5,10 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-import llm_w4d4
-from llm_w4d4 import MAX_ROUNDS, run_tools, run_agent
+from anthropic.types import TextBlock, ToolUseBlock
 
-from anthropic.types import ToolUseBlock, TextBlock
-
+from mock_crm.agent import loop
+from mock_crm.agent.loop import MAX_ROUNDS, run_agent, run_tools
 
 # ---------- Setup shared by every test ----------
 
@@ -17,7 +16,7 @@ from anthropic.types import ToolUseBlock, TextBlock
 @pytest.fixture(autouse=True)
 def temp_audit_file(tmp_path, monkeypatch):
     """Write audit lines to a temporary file, so tests never touch the real audit.jsonl."""
-    monkeypatch.setattr(llm_w4d4, "AUDIT_FILE", tmp_path / "audit.jsonl")
+    monkeypatch.setattr(loop, "AUDIT_FILE", tmp_path / "audit.jsonl")
 
 
 class FakeCRM:
